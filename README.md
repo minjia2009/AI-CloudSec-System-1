@@ -112,6 +112,3 @@ This repository is under continuous development, so please do not deploy insecur
 - [AWS GuardDuty Docs](https://docs.aws.amazon.com/guardduty/latest/ug/what-is-guardduty.html)
 - [Snowflake Tutorials](https://docs.snowflake.com/en/user-guide)
 - [MITRE ATT&CK Framework](https://attack.mitre.org/)
-
-
-it is pujan
