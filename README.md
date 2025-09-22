@@ -43,7 +43,8 @@ The project combines **theory** (cybersecurity frameworks) and **practice** (clo
 
 ### 1. Ensure git lfs is installed
 ```bash
-git lfs install
+
+
 ```
 If not installed, please review the document for [Installing Git Large File Storage](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage) before cloning the repository.
 
@@ -111,3 +112,6 @@ This repository is under continuous development, so please do not deploy insecur
 - [AWS GuardDuty Docs](https://docs.aws.amazon.com/guardduty/latest/ug/what-is-guardduty.html)
 - [Snowflake Tutorials](https://docs.snowflake.com/en/user-guide)
 - [MITRE ATT&CK Framework](https://attack.mitre.org/)
+
+
+it is pujan
