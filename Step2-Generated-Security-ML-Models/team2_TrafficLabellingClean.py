@@ -2,12 +2,13 @@
 team2_TrafficLabellingClean.py
 -------------------------------
 Functions:
-- Safe CSV reader (utf-8-sig with latin1 fallback)
-- Basic cleaning: dropna, duplicates, constant columns, IP/Timestamp columns, extreme values
-- Lightweight feature selection: low variance + high correlation filter
-- Numeric optimization: downcast + rounding
-- Outputs both cleaned CSV and validation report
-- Logs metrics and artifacts to MLflow
+- Safe CSV reader (utf-8-sig with latin1 fallback).
+- Basic cleaning: dropna, duplicates, constant columns,
+  IP/Timestamp columns, extreme values.
+- Lightweight feature selection: low variance filter +
+  high correlation filter.
+- Numeric optimization: downcast + rounding to reduce file size.
+- Outputs both cleaned CSV and validation report directly into /datasets.
 """
 
 import os
@@ -15,23 +16,22 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import VarianceThreshold
-import mlflow
 
 # ---------------- Paths ----------------
+# Source dataset folder (update this path if needed)
 DATA_FOLDER = r"C:\Users\hi\AI-CloudSec-System\data\traffic"
-PROJECT_DIR = os.path.abspath(os.path.join(os.getcwd()))  # 当前目录
-OUT_DIR = os.path.join(PROJECT_DIR, "Step1-Datasets-Feature-Engineering")
+
+# Output directory: /datasets inside the repo
+SCRIPT_PATH = os.path.abspath(__file__)
+PROJECT_DIR = os.path.dirname(SCRIPT_PATH)
+OUT_DIR = os.path.join(PROJECT_DIR, "datasets")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 OUT_FILE = os.path.join(OUT_DIR, "team2_TrafficLabellingClean.csv")
 REPORT = os.path.join(OUT_DIR, "team2_TrafficLabellingClean_report.txt")
 
-# ---------------- MLflow ----------------
-mlflow.set_tracking_uri(f"file:///{PROJECT_DIR}/mlruns")
-mlflow.set_experiment("Team2_Feature_Engineering_Traffic_Data")
 
-
-# ---------------- Functions ----------------
+# ---------------- Safe CSV Reader ----------------
 def safe_read_csv(path):
     try:
         print(f"Reading {path} with utf-8-sig ...")
@@ -41,6 +41,7 @@ def safe_read_csv(path):
         return pd.read_csv(path, low_memory=False, encoding="latin1")
 
 
+# ---------------- Cleaning ----------------
 def clean_dataframe(df, log):
     before = len(df)
     df = df.dropna().drop_duplicates()
@@ -66,6 +67,7 @@ def clean_dataframe(df, log):
     return df
 
 
+# ---------------- Feature Selection ----------------
 def feature_selection(df, log, label_col=" Label"):
     if label_col in df.columns:
         X = df.drop(columns=[label_col], errors="ignore")
@@ -73,8 +75,10 @@ def feature_selection(df, log, label_col=" Label"):
         X = df
 
     X = X.select_dtypes(include=np.number)
+
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
+
     selector = VarianceThreshold(threshold=0.01)
     X_var = selector.fit_transform(X_scaled)
     kept_cols = X.columns[selector.get_support()]
@@ -94,6 +98,7 @@ def feature_selection(df, log, label_col=" Label"):
     return X_df
 
 
+# ---------------- Numeric Optimization ----------------
 def optimize_numeric(df, log, decimals=2):
     before_mem = df.memory_usage(deep=True).sum() / (1024 * 1024)
     for col in df.select_dtypes(include=[np.number]).columns:
@@ -105,7 +110,8 @@ def optimize_numeric(df, log, decimals=2):
     after_mem = df.memory_usage(deep=True).sum() / (1024 * 1024)
     ratio = (before_mem - after_mem) / before_mem * 100
     log.append(
-        f"Optimized numeric cols: {before_mem:.2f}MB → {after_mem:.2f}MB (↓{ratio:.1f}%)"
+        f"Optimized numeric cols: {before_mem:.2f}MB →"
+        f"{after_mem:.2f}MB (↓{ratio:.1f}%)"
     )
     return df
 
@@ -113,43 +119,26 @@ def optimize_numeric(df, log, decimals=2):
 # ---------------- Main ----------------
 def main():
     log = []
+    files = [
+        os.path.join(DATA_FOLDER, f)
+        for f in os.listdir(DATA_FOLDER)
+        if f.endswith(".csv")
+    ]
+    dfs = [safe_read_csv(f) for f in files]
+    df = pd.concat(dfs, ignore_index=True)
+    log.append(f"Merged {len(files)} files: {df.shape}")
 
-    with mlflow.start_run() as run:
-        mlflow.set_tag("step", "data_cleaning_and_feature_selection")
+    df = clean_dataframe(df, log)
+    df_final = feature_selection(df, log)
+    df_final = optimize_numeric(df_final, log, decimals=2)
 
-        # Read all CSV files
-        files = [
-            os.path.join(DATA_FOLDER, f)
-            for f in os.listdir(DATA_FOLDER)
-            if f.endswith(".csv")
-        ]
-        dfs = [safe_read_csv(f) for f in files]
-        df = pd.concat(dfs, ignore_index=True)
-        log.append(f"Merged {len(files)} files: {df.shape}")
+    df_final.to_csv(OUT_FILE, index=False, encoding="utf-8-sig")
+    with open(REPORT, "w", encoding="utf-8") as f:
+        f.write("\n".join(str(x) for x in log))
 
-        # Clean, feature select, optimize
-        df = clean_dataframe(df, log)
-        df_final = feature_selection(df, log)
-        df_final = optimize_numeric(df_final, log)
-
-        # Log metrics
-        mlflow.log_metric("final_rows", len(df_final))
-        mlflow.log_metric("final_columns", df_final.shape[1])
-
-        # Save outputs
-        df_final.to_csv(OUT_FILE, index=False, encoding="utf-8-sig")
-        with open(REPORT, "w", encoding="utf-8") as f:
-            f.write("\n".join(str(x) for x in log))
-
-        # Log artifacts
-        mlflow.log_artifact(OUT_FILE, artifact_path="cleaned_data")
-        mlflow.log_artifact(REPORT, artifact_path="reports")
-
-        print("✅ Saved cleaned dataset:", OUT_FILE, df_final.shape)
-        print("📊 Validation report written:", REPORT)
-        print(f"MLflow Run ID: {run.info.run_id}")
+    print("✅ Saved cleaned dataset:", OUT_FILE, df_final.shape)
+    print("📊 Validation report written:", REPORT)
 
 
-# ---------------- Run ----------------
 if __name__ == "__main__":
     main()
